@@ -1,0 +1,27 @@
+
+
+
+subj = {'10','11'};
+for ss = 1:2
+folder_base = 'P:\VAFootStudy\';
+load('P:\VAFootStudy\Data\XBSP0000\Models\IV\inertialorientations\bonestructsubject10.mat')
+Tct(1).tibACS = bonestruct.tib.inertiaACS;
+Tct(1).talACS = bonestruct.tal.inertiaACS;
+tal_temp_file = 'P:\VAFootStudy\Data\XBSP00010\Trial008\XROMM\Tracking\XBSP00010_Trial008_tal_interp.tra';
+tib_temp_file = 'P:\VAFootStudy\Data\XBSP00010\Trial008\XROMM\Tracking\XBSP00010_Trial008_tib_interp.tra';
+tal_auto = csvread(tal_temp_file);
+tib_auto =csvread(tib_temp_file);
+Tx(1).tal = convertRotation(tal_auto,'autoscoper','4x4xn');
+Tx(1).tib = convertRotation(tib_auto,'autoscoper','4x4xn');
+
+[a b c] = eulerYZX(Tx(1).tib,Tx(1).tal,Tct(1).tibACS,Tct(1).talACS );
+figure;
+plot(a)
+figure
+plot(b)
+figure
+plot(c)
+end
+% %%
+% 'P:\VAFootStudy\Data\XBSP00011\Trial008\XROMM\Tracking\XBSP00011_Trial008_tal_interp.tra'
+% 'P:\VAFootStudy\Data\XBSP00011\Trial008\XROMM\Tracking\XBSP00011_Trial008_tib_interp.tra'
