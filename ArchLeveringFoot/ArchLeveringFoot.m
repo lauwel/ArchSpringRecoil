@@ -106,6 +106,15 @@ for t = 1:ntrials
     end
 end
 
+%% Load COM from visual 3d
+
+
+vis3d = load('E:\ArchSpring_Gearing\Visual3D\com.mat');
+
+for t = 1:ntrials
+    ind_match = find(contains(vis3d.FILE_NAME,trialStruct(t).trial));
+    trialStruct(t).kinemat.COM = vis3d.COM{ind_match};
+end
 %% associate a static mocap file with each trial
 close all
 pelvis_marker_names = {'r_ASIS','r_PSIS','r_pelvis','l_ASIS','l_PSIS','l_pelvis'};
@@ -326,10 +335,15 @@ for t = t_start:1:ntrials
     
     Fs = trialStruct(t).marker_data.FrameRate;
       % Forces -----------------------
-     
+    
     frsX = trialStruct(t).keyFrames.cropFrsXray;
     frsF = trialStruct(t).keyFrames.cropFrsForce;
+    fr_off = trialStruct(t).keyFrames.frOffset
+     % total force
+    F_tot = trialStruct(t).force_data(1).globForce+trialStruct(t).force_data(2).globForce;
+    
     nfrsX = abs(diff(frsX))+1;
+    
     if contains(trialStruct(t).condition.task,'walk')
         frs0 = find(trialStruct(t).force_data(2).Force(3,frsF(1)+15:frsF(2)) < 50);
         figure(302); plot(trialStruct(t).force_data(2).Force(3,frsF(1)+15:frsF(2)))
@@ -356,7 +370,7 @@ for t = t_start:1:ntrials
     s_ind = findInStruct(subjStruct,'subject',trialStruct(t).subject);
     
     ang_DP_tibtal = nan(nfrs_tot,1); align_z = nan(nfrs_tot,1);align_z_rot = nan(nfrs_tot,1);ang_DP_mtp = nan(nfrs_tot,1); ang_DP_calmet = nan(nfrs_tot,1);
-    ang_DP_cal = nan(nfrs_tot,1);ang_DP_ph1 = nan(nfrs_tot,1); ang_DP_mt1 = nan(nfrs_tot,1); ang_DP_tibcal = nan(nfrs_tot,1);
+    ang_DP_cal = nan(nfrs_tot,1);ang_DP_ph1 = nan(nfrs_tot,1); ang_DP_mt1 = nan(nfrs_tot,1); ang_DP_tibcal = nan(nfrs_tot,1); align_tib_GRF = nan(nfrs_tot,1);
     for fr = frsX(1):frsX(2)
         [ang_DP_tibtal(fr),ang_SP_tibtal(fr),ang_AD_tibtal(fr)] = eulerYZX(   trialStruct(t).Tm_mm.tib(:,:,fr),trialStruct(t).Tm_mm.tal(:,:,fr) ,...
             subjStruct(s_ind).bones.tib.T_ACS.T_TC,  subjStruct(s_ind).bones.tal.T_ACS.T_TC);
@@ -383,7 +397,10 @@ for t = t_start:1:ntrials
         T_acs_tib_x(:,:,fr) =  trialStruct(t).Tm_mm.tib(:,:,fr)* subjStruct(s_ind).bones.tib.T_ACS.T_TC;
         
         align_z(fr) = dot( T_acs_tib_x(1:3,3,fr),[0 0 1]');
+        
         [align_z_rot(fr),~,~] = eulerYZX(eye(4,4),T_acs_tib_x(:,:,fr),eye(4,4),eye(4,4)); % the global axis rotation
+        align_tib_GRF(fr) = dot( T_acs_tib_x(1:3,3,fr),unit(F_tot(:,fr + fr_off)));
+        
         % get the angular velocity of the bones but put it in their
         % anatomical cosys
         Tw.tibACS(:,:,fr) = invTranspose(subjStruct(s_ind).bones.tib.T_ACS.T_TC)*trialStruct(t).Tm_mm.tib(:,:,fr);
@@ -394,8 +411,9 @@ for t = t_start:1:ntrials
         
         Tw.mt1cal(:,:,fr) = invTranspose(trialStruct(t).Tm_mm.cal(:,:,fr)) *trialStruct(t).Tm_mm.mt1(:,:,fr) ;
         Tw.taltib(:,:,fr) = invTranspose(trialStruct(t).Tm_mm.tib(:,:,fr)) *trialStruct(t).Tm_mm.tal(:,:,fr) ;
-    end
     
+    
+    end
     w(t).tib(:,frsX(1):frsX(2)) = calculateRotMatAngularVelocity( Tw.tibACS(1:3,1:3,frsX(1):frsX(2)),Fs,'deg');
     w(t).cal(:,frsX(1):frsX(2)) = calculateRotMatAngularVelocity( Tw.calACS(1:3,1:3,frsX(1):frsX(2)),Fs,'deg');
     w(t).tal(:,frsX(1):frsX(2)) = calculateRotMatAngularVelocity( Tw.talACS(1:3,1:3,frsX(1):frsX(2)),Fs,'deg');
@@ -434,8 +452,8 @@ for t = t_start:1:ntrials
     [v_maxarch(t),trialStruct(t).keyFrames.max_arch] = nanmax(ang_DP_calmet(1:end));
     trialStruct(t).keyFrames.max_arch = trialStruct(t).keyFrames.max_arch;
     
-    F_AP = trialStruct(t).force_data(1).globForce(2,frsF(1):frsF(2))+trialStruct(t).force_data(2).globForce(2,frsF(1):frsF(2)); % sum of both FP AP forces
-    F_SI = trialStruct(t).force_data(1).globForce(3,frsF(1):frsF(2))+trialStruct(t).force_data(2).globForce(3,frsF(1):frsF(2)); % sum of both FP SI forces
+    F_AP = F_tot(2,frsF(1):frsF(2));%trialStruct(t).force_data(1).globForce(2,frsF(1):frsF(2))+trialStruct(t).force_data(2).globForce(2,frsF(1):frsF(2)); % sum of both FP AP forces
+    F_SI = F_tot(3,frsF(1):frsF(2));%trialStruct(t).force_data(1).globForce(3,frsF(1):frsF(2))+trialStruct(t).force_data(2).globForce(3,frsF(1):frsF(2)); % sum of both FP SI forces
     
     Iprop = find(F_AP(10:end) > 0,1,'first') + 9;
     [maxSIForce(t),ImaxGRF] = max(F_SI(25:end));
@@ -474,24 +492,22 @@ for t = t_start:1:ntrials
     p = trialStruct(t).plot;
     x_vals = linspace(0,100,nfrsX);
     figure(5); hold on; plot(x_vals,P_UD,'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill); ylabel('Power [W/kg]')
-
-%     calculate impulse
-impulse = [];
+    
+    %     calculate impulse
+    impulse = [];
     for d = 1:3
-    impulse(d,:) = nancumtrapz(0:1/Fs:(nfrsX-1)/Fs,F_GRF(d,:));
+        impulse(d,:) = nancumtrapz(0:1/Fs:(nfrsX-1)/Fs,F_GRF(d,:));
     end
     impulse_norm = norm3d(impulse);
-  
+    
     %     figure(6); hold on; plot(x_vals,E_UD/demo.weight(s_ind),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill); ylabel('Work [J/kg]')
-%     figure(7); hold on; plot(E_UD(I_pow),Pmax,'Color',p.col,'marker',p.marker_type)
+    %     figure(7); hold on; plot(E_UD(I_pow),Pmax,'Color',p.col,'marker',p.marker_type)
 %     figure(8); hold on; plot(ROM_ankle(t),E_UD(I_pow),'Color',p.col,'marker',p.marker_type)
 %     figure(9); hold on; plot(ROM_ankle(t),Pmax,'Color',p.col,'marker',p.marker_type)
 %     figure(10); hold on; plot(v_maxarch(t),E_UD(I_pow),'Color',p.col,'marker',p.marker_type)
 %     figure(11); hold on; plot(v_maxarch(t),Pmax,'Color',p.col,'marker',p.marker_type)
 %      
 %      
-     
-     
      % Calculate the timing - -------------------------------------
      
      cont_time(t) = diff(frsX)/Fs;%(fr_mtp_s'-fr_start_s');
@@ -505,10 +521,14 @@ impulse = [];
      
      p = trialStruct(t).plot;
     
-    stancePts = linspace(0,100,frsX(2)-frsX(1)+1);
+    stancePts{t} = linspace(0,100,frsX(2)-frsX(1)+1);
 
+    figure(400);hold on;
+    plot(stancePts{t},align_tib_GRF(frsX(1):frsX(2)),'Color',p.col,'marker',p.marker_type)
+     
+     
     I_labels = {'Maximum MTP dorsiflexion','Maximum ankle dorsiflexion','Maximum arch dorsiflexion','Peak vertical force','Minimum MTP dorsiflexion','Propulsion','max Talus power'};
-    I_frs_save(t,:) = stancePts([Imax_mtp,Imax_adors,Imax_arch,ImaxGRF,Imin_mtp, Iprop,I_pow]);
+    I_frs_save(t,:) = stancePts{t}([Imax_mtp,Imax_adors,Imax_arch,ImaxGRF,Imin_mtp, Iprop,I_pow]);
     
     
     
@@ -531,12 +551,12 @@ impulse = [];
 
     figure(145); hold on;
 %     subplot(2,1,1); hold on; grid on;
-%     plot(stancePts,align_z(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+%     plot(stancePts{t},align_z(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
 %     ylabel('dot product of long tib axis with glob')
 %     
 %     subplot(2,1,2)
     hold on; grid on;
-    plot(stancePts,-align_z_rot(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+    plot(stancePts{t},-align_z_rot(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
     ylabel('rotational tibia alignment')
     makeNicePlotsFunction
     trialStruct(t).kinemat.tib_lean.dot_mov = align_z;
@@ -550,24 +570,24 @@ impulse = [];
     makeNicePlotsFunction
     
     
-    figure(196+t_start)
-    subplot(3,1,1); hold on
-    plot(stancePts,norm3d(w(t).mt1cal(:,frsX(1):frsX(2))'),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
-    ylabel('mt1 dors ang vel [deg]')
-    makeNicePlotsFunction
-    
-    subplot(3,1,2); hold on
-    plot(stancePts,norm3d(w(t).taltib(:,frsX(1):frsX(2))'),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
-    ylabel('tib dors ang vel [deg]')
-    makeNicePlotsFunction    
-    
-    subplot(3,1,3); hold on
-    plot(stancePts,w(t).tal(1,frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
-    ylabel('tal dors ang vel [deg]')
-    makeNicePlotsFunction
+%     figure(196+t_start)
+%     subplot(3,1,1); hold on
+%     plot(stancePts{t},norm3d(w(t).mt1cal(:,frsX(1):frsX(2))'),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+%     ylabel('mt1 dors ang vel [deg]')
+%     makeNicePlotsFunction
+%     
+%     subplot(3,1,2); hold on
+%     plot(stancePts{t},norm3d(w(t).taltib(:,frsX(1):frsX(2))'),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+%     ylabel('tib dors ang vel [deg]')
+%     makeNicePlotsFunction    
+%     
+%     subplot(3,1,3); hold on
+%     plot(stancePts{t},w(t).tal(1,frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+%     ylabel('tal dors ang vel [deg]')
+%     makeNicePlotsFunction
     
 %     subplot(4,1,4); hold on
-%     plot(stancePts([Imax_mtp,Imax_adors,Imax_arch,Imin_mtp,ImaxGRF,Iprop]),1:6,'Color',p.col,'marker',p.marker_type)  
+%     plot(stancePts{t}([Imax_mtp,Imax_adors,Imax_arch,Imin_mtp,ImaxGRF,Iprop]),1:6,'Color',p.col,'marker',p.marker_type)  
 %     set(gca,'YTick',1:5,'YTickLabel',{'Max MTP','Max ank dors','Max arch dors','Min MTP','Force SI','Force AP'})
 %     xlim([0 100])
 %     ylim([0 7])
@@ -576,21 +596,21 @@ impulse = [];
     
     figure(198+t_start)
     subplot(3,1,3); hold on
-    plot(stancePts,ang_DP_calmet(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+    plot(stancePts{t},ang_DP_calmet(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
     
-    plot(stancePts(Imax_mtp),ang_DP_calmet(trialStruct(t).keyFrames.max_mtp),'Color','k','marker',p.marker_type,'MarkerFaceColor','k');
+    plot(stancePts{t}(Imax_mtp),ang_DP_calmet(trialStruct(t).keyFrames.max_mtp),'Color','k','marker',p.marker_type,'MarkerFaceColor','k');
     ylabel('arch dorsiflexion [deg]')
     makeNicePlotsFunction
 
     subplot(3,1,2); hold on
-    plot(stancePts,ang_DP_tibtal(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
-    plot(stancePts(Imax_mtp),ang_DP_tibtal(trialStruct(t).keyFrames.max_mtp),'Color','k','marker',p.marker_type,'MarkerFaceColor','k');
+    plot(stancePts{t},ang_DP_tibtal(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+    plot(stancePts{t}(Imax_mtp),ang_DP_tibtal(trialStruct(t).keyFrames.max_mtp),'Color','k','marker',p.marker_type,'MarkerFaceColor','k');
     ylabel('tib-tal dors [deg]')
     makeNicePlotsFunction    
     
     subplot(3,1,1); hold on
-    plot(stancePts,ang_DP_mtp(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
-    plot(stancePts(Imax_mtp),ang_DP_mtp(trialStruct(t).keyFrames.max_mtp),'Color','k','marker',p.marker_type,'MarkerFaceColor','k');
+    plot(stancePts{t},ang_DP_mtp(frsX(1):frsX(2))','Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+    plot(stancePts{t}(Imax_mtp),ang_DP_mtp(trialStruct(t).keyFrames.max_mtp),'Color','k','marker',p.marker_type,'MarkerFaceColor','k');
     ylabel('MTP dors [deg]')
     makeNicePlotsFunction
     
@@ -621,9 +641,9 @@ impulse = [];
     
     
 % impulse vs ROM    
-       figure(6); hold on; plot(ROM_arch(t),impulse_norm(end),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
-       ylabel('Impusle [Ns/kg]')
-    xlabel('Arch ROM')
+%        figure(6); hold on; plot(ROM_arch(t),impulse_norm(end),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill);
+%        ylabel('Impusle [Ns/kg]')
+%     xlabel('Arch ROM')
 %   ROM PLOTS AGAINST EACH OTHER------------------------------------------     
 %     figure(208)
 %     hold on;
@@ -645,9 +665,16 @@ impulse = [];
     last_fr_tracked = fr_tracked(end);
     trialStruct(t).keyFrames.last_fr_tracked = last_fr_tracked;
     
-  
+    figure(122);hold on;
+    plot(stancePts{t}(Iprop:end),trialStruct(t).kinemat.COM(frsF(1)+Iprop-1:frsF(2),3)-nanmean(trialStruct(t).kinemat.COM(frsF(1)+Iprop-1:frsF(2),3)),'Color',p.col,'marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor',p.marker_fill) 
+    plot(stancePts{t}(Imax_arch),trialStruct(t).kinemat.COM(frsF(1)+Imax_arch-1,3)-nanmean(trialStruct(t).kinemat.COM(frsF(1)+Iprop-1:frsF(2),3)),'Color','k','marker',p.marker_type,'linestyle',p.line,'MarkerFaceColor','k')
+%     yyaxis right
+figure(123); hold on
+    plot(stancePts{t},F_AP,'Color',p.col,'marker','none','linestyle',p.line,'MarkerFaceColor',p.marker_fill)
+    
+    
+    
 end
-
 
 makeGroupedStatsDotPlot(align_z_R_s',repmat(1:2,1,ntrials/2)',{'walk','run'},{'propulsion','max arch dors','max ankle dors','max MTP'},parula(5),'d')
 ylabel('tibia alignment with global axes [^o]')
@@ -964,6 +991,13 @@ end
 
 %% measure the fixed arch transforms
 close all
+ctW = 1; ctR = 1; % counters for tibia lean
+
+tib_rot_walk_mov = [];
+tib_rot_walk_fix = [];
+
+tib_rot_run_mov= [];
+tib_rot_run_fix= [];
 
 for t = 1:ntrials-2
 
@@ -974,9 +1008,10 @@ for t = 1:ntrials-2
     frsF = trialStruct(t).keyFrames.cropFrsForce;
     nfrs_stance = abs(diff(frsX))+1;
     % important gait events
-    fr_start = trialStruct(t).keyFrames.max_arch;%
-%     fr_start_s(t) - fr_star;
-    fr_mtp = trialStruct(t).keyFrames.max_mtp;%fr_mtp_s(t);
+    fr_start_s(t)= trialStruct(t).keyFrames.max_arch;
+    fr_mtp_s(t)=  trialStruct(t).keyFrames.max_mtp;
+    fr_start = fr_start_s(t);
+    fr_mtp = fr_mtp_s(t);
     % I frames depict that they are from the first frame of cropped data
     Ifr_hu = trialStruct(t).keyFrames.heelupForce - frsF(1)+1;
     Ifr_min_mtp = trialStruct(t).keyFrames.min_mtp - frsX(1) + 1 ;
@@ -995,15 +1030,22 @@ for t = 1:ntrials-2
     clearvars('T_fix')
     bone_listM = fields(Tm);
     nBones = length(bone_listM);
+    align_z_rot = nan(1,frsX(2));
+    
+    
     for bn = 1:nBones
         T_bone_fix = Tm.(bone_listM{bn})(:,:,fr_start);
         if strcmp(bone_listM{bn},'tib') % give it tibio-talar kinematics
             for fr = frsX(1):frsX(2)
                 % give all the fixed transforms with the mt1 relative to the selected max dors position
-                T_fix.(bone_listM{bn})(:,:,fr) = T_mt1(:,:,fr) * invTranspose(T_mt1_fix) * Tm.tal(:,:,fr_start) *  invTranspose(Tm.tal(:,:,fr)) * Tm.tib(:,:,fr);
+                T_fix.(bone_listM{bn})(:,:,fr) = T_mt1(:,:,fr) * invTranspose(T_mt1_fix) * Tm.tal(:,:,fr_start) *  invTranspose(Tm.tal(:,:,fr)) * Tm.tib(:,:,fr); % locked with MTP but has talocrural mechanics
+                
+                
+                [align_z_rot(1,fr),~,~] = eulerYZX(eye(4,4),T_fix.(bone_listM{bn})(:,:,fr),eye(4,4),subjStruct(s_ind).bones.tib.T_ACS.T_TC); % the global axis rotation
+                
                 % lock it in the plantarflexed position
-                T_bone_fix = Tm.(bone_listM{bn})(:,:,fr_mtp);
-                T_fix.tib_plant(:,:,fr) = T_mt1(:,:,fr) * invTranspose(T_mt1_fix) * Tm.tal(:,:,fr_start) *  invTranspose(Tm.tal(:,:,fr_mtp)) * Tm.tib(:,:,fr_mtp);%T_mt1(:,:,fr) * invTranspose(Tx.mt1(:,:,fr_mtp)) * T_bone_fix;
+%                 T_bone_fix = Tm.(bone_listM{bn})(:,:,fr_mtp);
+                T_fix.tib_plant(:,:,fr) = T_mt1(:,:,fr) * invTranspose(T_mt1_fix) * Tm.tal(:,:,fr_start) *  invTranspose(Tm.tal(:,:,fr_mtp)) * Tm.tib(:,:,fr_mtp); % when it's fixed in the final position
             end
         elseif  strcmp(bone_listM{bn},'ph1')% give it MTPJ kinematics
             
@@ -1024,24 +1066,25 @@ for t = 1:ntrials-2
     end
     
     trialStruct(t).T_fix    = T_fix;
-    
+    trialStruct(t).kinemat.tib_lean.fix_rot = align_z_rot;
     
     
     % -------------------- push off frame if tibia is in max plantarflexion----
     T_ACS_tib = subjStruct(s_ind).bones.tib.T_ACS.T_TC;
     tib_pts = subjStruct(s_ind).bones.tib.pts;
     % find the tibia's position
-    align_z = [];
+    align_z = []; align_z_rot=nan(1,frsX(2));
     T_act_plant = Tm.tib(:,:,fr_mtp) * T_ACS_tib;
-    for fr = fr_start:fr_mtp
+    for fr = fr_start:frsX(2)
         
         T_fix_plant = T_fix.tib_plant(:,:,fr) * T_ACS_tib;
         
-        
-        %            figure(101)
-        %             pcshow(pointCloud(transformPoints(T_fix.tib_plant(:,:,fr),tib_pts)));hold on;
-        %             pcshow(pointCloud(transformPoints(Tx.tib(:,:,fr_mtp),tib_pts)));
-        %             drawnow
+%         
+%                    figure(101)
+%                     pcshow(pointCloud(transformPoints(T_fix.tib_plant(:,:,fr),tib_pts)));hold on;
+%                     pcshow(pointCloud(transformPoints(Tm.tib(:,:,fr),tib_pts)));        
+%                     pcshow(pointCloud(transformPoints(Tm.tib(:,:,fr_mtp),tib_pts)));
+%                     drawnow
         %             figure(100)
         %             hold on;
         %             plotvector3([0 0 0]',T_fix_plant(1:3,3),'r')
@@ -1049,13 +1092,14 @@ for t = 1:ntrials-2
         %             drawnow
         
         
-        align_z(fr) = dot(T_fix_plant(1:3,3),T_act_plant(1:3,3));
+        align_z(fr) = dot(T_fix_plant(1:3,3),T_act_plant(1:3,3)); % when the fixed arch and moving arch have an aligned tibia
+        
+        
     end
     
     [~,fr_tib_glob_align(t)] = max(align_z);
     
     trialStruct(t).keyFrames.fr_tg = fr_tib_glob_align(t); %
-    
     
     
     % finally, take the tib @ max mtp in the fixed position, and rotate it
@@ -1160,7 +1204,43 @@ for t = 1:ntrials-2
 %     visualizeBone(subjStruct(s_ind).bones.tal.pts,subjStruct(s_ind).bones.tal.cnt(1:10:end,1:3),invTranspose(Tm.tal(:,:,fr_mtp)) * Tm.tal(:,:,fr_mtp))
 %     h = plotvector3(s,n*100,'r');
 %     h.LineWidth = 5;
+
+    if mod(t,2) == 0
+        tib_rot_walk_mov(ctW,:) = -normaliseNaN(trialStruct(t).kinemat.tib_lean.rot_mov(frsX(1):frsX(2))',2,101);
+        tib_rot_walk_fix(ctW,:) = -normaliseNaN( trialStruct(t).kinemat.tib_lean.fix_rot(frsX(1):frsX(2)),2,101);
+        ctW = ctW+1;
+    else
+        tib_rot_run_mov(ctR,:) = -normaliseNaN(trialStruct(t).kinemat.tib_lean.rot_mov(frsX(1):frsX(2))',2,101);
+        tib_rot_run_fix(ctR,:) = -normaliseNaN( trialStruct(t).kinemat.tib_lean.fix_rot(frsX(1):frsX(2)),2,101);
+        ctR = ctR+1;
+    end
 end
+
+cmap = parula(10);
+
+figure(20);subplot(2,1,1);hold on;
+PrettyStdDevGraphs(0:100,nanmean(tib_rot_walk_mov,1),nanstd(tib_rot_walk_mov),cmap(1,:)); hold on;
+
+    plot(0:100,tib_rot_walk_mov,'color',cmap(1,:));
+
+
+subplot(2,1,2);hold on;
+PrettyStdDevGraphs(0:100,nanmean(tib_rot_run_mov,1),nanstd(tib_rot_run_mov),cmap(1,:)); hold on;
+plot(0:100,tib_rot_run_mov,'color',cmap(1,:));
+h = PrettyStdDevGraphs(0:100,nanmean(tib_rot_run_fix,1),nanstd(tib_rot_run_fix),cmap(4,:));hold on;
+plot(0:100,tib_rot_run_fix,'color',cmap(4,:));
+h(2).LineStyle = ':';
+% measure the tibial lean in all cases
+for t = 1:ntrials-2
+    frsX = trialStruct(t).keyFrames.cropFrsXray;
+    subplot(2,1,1)
+    % plot each rigid arch only from where it locked
+    stancePtsCrop = stancePts{t}((fr_start_s(t)- frsX(1)+1):(fr_mtp_s(t)- frsX(1)+1) );
+plot(stancePtsCrop,tib_rot_walk_fix(fr_start_s(t):fr_mtp_s(t)),'color',cmap(4,:));
+
+end
+h = PrettyStdDevGraphs(0:100,nanmean(tib_rot_walk_fix,1),nanstd(tib_rot_walk_fix),cmap(4,:));hold on;
+h(2).LineStyle = ':';
 %% Calculate the plane of the achilles on the calcaneus
 
 
@@ -1988,7 +2068,7 @@ end
 
 
 % clearvars -except trialStruct subjStruct dir_analy cmap_crop cmap nsubj ntrials dir_ref fr_start_s fr_mtp_s demo res
-clear stancePts
+% clear stancePts
 
 load('colorblind_map.mat') % loads the cmap_cb variable
 
@@ -2004,8 +2084,10 @@ for t = 1:ntrials-2
     frsF = trialStruct(t).keyFrames.cropFrsForce;
     nfrs_stance = abs(diff(frsX))+1;
     % important gait events
+    
     fr_start = fr_start_s(t);
     fr_mtp = fr_mtp_s(t);
+    
     % I frames depict that they are from the first frame of cropped data
     Ifr_hu = trialStruct(t).keyFrames.heelupForce - frsF(1)+1;
     Ifr_min_mtp = trialStruct(t).keyFrames.min_mtp - frsX(1) + 1 ;
